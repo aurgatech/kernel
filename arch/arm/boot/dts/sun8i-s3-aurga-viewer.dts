@@ -1,0 +1,276 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR X11)
+/*
+ * Copyright 2019 Icenowy Zheng <icenowy@aosc.io>
+ */
+
+/dts-v1/;
+#include "sun8i-v3.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+
+/ {
+	model = "AURGA Viewer";
+	compatible = "qisi,aurga-viewer", "sochip,s3", "allwinner,sun8i-v3";
+
+	aliases {
+		serial0 = &uart0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x40000000 0x8000000>;
+	};
+
+	cedarx: video-codec@1c0e000 {
+		compatible = "allwinner,sun8i-v3-cedar";
+		reg = <0x01c0e000 0x1000>;
+		clocks = <&ccu CLK_BUS_VE>, <&ccu CLK_VE>, <&ccu CLK_DRAM_VE>;
+		clock-names = "ahb", "mod", "ram";
+		resets = <&ccu RST_BUS_VE>;
+		interrupts = <GIC_SPI 58 IRQ_TYPE_LEVEL_HIGH>;
+		allwinner,sram = <&ve_sram 1>;
+		status = "okay";
+	};
+			
+	ion: ion {
+		compatible = "allwinner,sunxi-ion";
+		status = "okay";
+		heap_cma@0{
+			compatible = "allwinner,cma";
+			heap-name  = "cma";
+			heap-id    = <0x4>;
+			heap-base  = <0x0>;
+			heap-size  = <0x0>;
+			heap-type  = "ion_cma";
+		};
+	};
+
+	csi0: csi@1cb0000 {
+		compatible = "allwinner,sun8i-v3s-csi";
+		reg = <0x01cb0000 0x3000>;
+		interrupts = <GIC_SPI 83 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&ccu CLK_BUS_CSI>, <&ccu CLK_CSI1_SCLK>, <&ccu CLK_DRAM_CSI>, <&ccu CLK_MIPI_CSI>;
+		clock-names = "bus", "mod", "ram", "dphy";
+		resets = <&ccu RST_BUS_CSI>;
+		status = "disabled";
+	};
+
+	wifi_pwrseq: wifi_pwrseq {
+		compatible = "mmc-pwrseq-simple";
+		reset-gpios = <&pio 3 21 GPIO_ACTIVE_LOW>; // PD21 WIFI-RST 
+		post-power-on-delay-ms = <100>;
+	};
+
+	reg_vcc_wifi: vcc-wifi {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc-wifi";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+	};
+
+	codec_dummy:codec_dummy {
+		compatible = "linux,snd-soc-dummy";
+        #sound-dai-cells = <0>;
+        status = "okay";
+	};
+
+	sound {
+        compatible = "simple-audio-card";
+        simple-audio-card,format = "i2s";
+		simple-audio-card,bitclock-master = <&snd_codec>;
+        simple-audio-card,frame-master = <&snd_codec>;
+        simple-audio-card,mclk-fs = <512>;
+        status = "okay";
+
+        snd_cpu: simple-audio-card,cpu {
+            sound-dai = <&i2s0>;
+        };
+ 
+        snd_codec: simple-audio-card,codec {
+            sound-dai = <&codec_dummy>;
+    	};  
+    };
+
+	timer {
+		clock-frequency = <24000000>;
+	};
+};
+
+&pio {
+	csi0_mclk: csi0-mclk {
+        pins = "PE20";
+        function = "csi_mipi";
+    };
+
+	hdmi_gpio:hdmi-gpio{
+		pins = "PD20", "PE18", "PE19";
+        function = "gpio_out";
+	};
+
+	i2s_pins: i2s-pins{
+		pins = "PG10", "PG11", "PG12", "PG13";
+        function = "i2s";
+	};
+};
+
+&syscon {
+	sram_c: sram@1d00000 {
+		compatible = "mmio-sram";
+		reg = <0x01d00000 0x80000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges = <0 0x01d00000 0x80000>;
+
+		ve_sram: sram-section@0 {
+			compatible = "allwinner,sun8i-v3s-sram-c", "allwinner,sun4i-a10-sram-c1";
+			reg = <0x000000 0x80000>;
+		};
+	};
+};
+
+&uart1_pg_pins {
+	pins = "PG6", "PG7", "PG8", "PG9";
+	function = "uart1";
+};
+
+&codec {
+	allwinner,audio-routing = 
+		"Line Out", "LINEOUT",
+		"LINEIN", "Line In";
+	status = "disabled";
+};
+
+&i2s0 {
+	status = "okay";
+};
+
+&emac {
+	phy-handle = <&int_mii_phy>;
+	phy-mode = "mii";
+	status = "okay";
+};
+
+&uart0 {
+	pinctrl-0 = <&uart0_pb_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&usb_otg {
+	dr_mode = "peripheral";
+	status = "okay";
+};
+
+&usbphy {
+	status = "okay";
+};
+
+&spi0 {
+        status ="okay";
+		dma-names = ""; /* Disable DMA!!! DMA causes conflicts with jffs2 */
+        mx25l12805d:mx25l12805d@0 {
+                compatible = "jedec,spi-nor";
+                reg = <0x0>;
+                spi-max-frequency = <50000000>;
+                #address-cells = <1>;
+                #size-cells = <1>;
+				m25p,fast-read;
+        };
+
+};
+
+&csi0 {
+    status = "okay";
+    allwinner,mipi-csi-bps = <400000000>;
+    port {
+        csi0_ep: endpoint {
+            remote-endpoint = <&tc358749_out>;
+            data-lanes = <1 2 3 4>;
+			clock-lanes = <0>;
+			clock-noncontinuous;
+			link-frequencies = /bits/ 64 <320000000>;
+        };
+    };
+};
+
+/* Bluetooth */
+&uart1 {
+	pinctrl-0 = <&uart1_pg_pins>;
+	pinctrl-names = "default";
+	uart-has-rtscts;
+	status = "okay";
+
+	bluetooth {
+		compatible = "brcm,bcm43438-bt";
+		clocks = <&rtc 1>;
+		clock-names = "lpo";
+		device-wakeup-gpios = <&pio 4 01 GPIO_ACTIVE_HIGH>; /* PE01 */
+		host-wakeup-gpios = <&pio 1 12 GPIO_ACTIVE_HIGH>; /* PB12 */
+		shutdown-gpios = <&pio 4 00 GPIO_ACTIVE_HIGH>; /* PE00 */
+	};
+};
+
+&mmc0 {
+	vmmc-supply = <&reg_vcc_wifi>;
+	vqmmc-supply = <&reg_vcc_wifi>;
+	cd-gpios = <&pio 5 06 GPIO_ACTIVE_LOW>; /* PF06 */
+	pinctrl-0 = <&mmc0_pins>;
+	bus-width = <4>;
+	status = "disabled";
+};
+
+/* Wi-Fi Module */
+&mmc1 {
+	vmmc-supply = <&reg_vcc_wifi>;
+	vqmmc-supply = <&reg_vcc_wifi>;
+	pinctrl-0 = <&mmc1_pins>;
+	bus-width = <4>;
+	mmc-pwrseq = <&wifi_pwrseq>;
+	status = "okay";
+	keep-power-in-suspend;
+	non-removable;
+	cap-sd-highspeed;
+	cap-mmc-highspeed;
+	cap-sdio-irq;
+};
+
+&i2c0 {
+	clock-frequency = <100000>;
+    status = "okay";
+};
+
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c1_pe_pins>;
+    status = "okay";
+
+    tc358749: hdmi@f {
+        compatible = "toshiba,tc358xxx";
+		reg = <0xf>;
+		pinctrl-names = "default";
+        pinctrl-0 = <&csi0_mclk>;
+        pinctrl-1 = <&hdmi_gpio>;
+		reset-gpios = <&pio 4 23 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;	 	/* PD20 HDMI STD */
+		//* tc358749
+		power-gpios = <&pio 4 18 GPIO_ACTIVE_LOW>; 
+		standby-gpios = <&pio 3 20 GPIO_ACTIVE_LOW>; 
+		///*/
+		interrupt-parent = <&pio>;
+		interrupts = <1 10 IRQ_TYPE_LEVEL_HIGH>; /* PB10 HDMI INT */
+
+		port {
+			tc358749_out: endpoint {
+				remote-endpoint = <&csi0_ep>;
+				data-lanes = <1 2 3 4>;
+				clock-lanes = <0>;
+				clock-noncontinuous;
+				link-frequencies = /bits/ 64 <297000000>;
+			};
+		};
+    };
+};
